@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fable 5 Operating Protocol — 协议效果对照</title>
+<style>
+/* --- DESIGN TOKENS ---
+   Three themes only: light, dark, system. Every colour in this file resolves
+   through a semantic token declared here -- no component below writes a raw
+   hex value. This is rule 9 of <utility_color> in SKILL.md: a hardcoded hex is
+   an incident, because a palette change then requires touching every rule
+   instead of one token block.
+
+   Token names are semantic (surface, ink, border, pass, fail) rather than
+   literal (grey-900, red-500) so that a theme can invert a relationship
+   without renaming anything: --ink is "the readable text colour", never
+   "a specific grey", so dark mode inverts it and nothing else changes.
+   */
+
+/* Light is the base declaration. This matters for the system theme: when no
+   data-theme attribute is present at all, :root resolves to these values, and
+   the prefers-color-scheme block below overrides them. */
+:root {
+  --bg: #fbfbfa;
+  --surface: #ffffff;
+  --surface-2: #f6f6f4;
+  --ink: #1a1c1f;
+  --ink-muted: #5c626c;
+  --ink-faint: #8b919b;
+  --border: #e4e3e0;
+  --border-strong: #d2d0cb;
+
+  /* Terracotta rather than indigo/violet. Indigo is the default accent of
+     model-generated UI and reads as an unexamined choice; this is picked to
+     sit warmly against both a near-white and a near-black surface without
+     needing a separate value per theme. */
+  --accent: #b5492a;
+  --accent-soft: rgba(181, 73, 42, 0.09);
+
+  /* Status colours are used only in the rubric table's marks. They are
+     desaturated enough to stay legible as text, not just as fills. */
+  --pass: #2f7a4f;
+  --pass-soft: rgba(47, 122, 79, 0.11);
+  --fail: #a63a22;
+  --fail-soft: rgba(166, 58, 34, 0.1);
+  --warn: #8a6d0b;
+  --warn-soft: rgba(138, 109, 11, 0.12);
+
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+          "PingFang SC", "Microsoft YaHei", sans-serif;
+
+  /* Single radius token. Corner rounding is not a per-component decision
+     here; allowing variation would reintroduce the pill-radius tell. */
+  --r: 6px;
+}
+
+/* Dark tokens are declared twice, once for the explicit attribute and once
+   for the system preference. This duplication is a limitation of plain CSS:
+   custom properties cannot be shared across a media query and an attribute
+   selector without a preprocessor. The two blocks must be kept identical --
+   if you edit one, edit both. */
+:root[data-theme="dark"] {
+  --bg: #0f1115;
+  --surface: #16191f;
+  --surface-2: #1c2028;
+  --ink: #e6e8ec;
+  --ink-muted: #9aa1ad;
+  --ink-faint: #6b7280;
+  --border: #262b34;
+  --border-strong: #333a45;
+  --accent: #d97757;
+  --accent-soft: rgba(217, 119, 87, 0.12);
+  --pass: #4a9d6e;
+  --pass-soft: rgba(74, 157, 110, 0.13);
+  --fail: #c0563f;
+  --fail-soft: rgba(192, 86, 63, 0.13);
+  --warn: #c9a227;
+  --warn-soft: rgba(201, 162, 39, 0.13);
+}
+
+@media (prefers-color-scheme: dark) {
+  /* :not([data-theme]) is the system case: the script removes the attribute
+     entirely when the user picks "follow system", so this selector matches
+     only when no explicit override exists. Keeping it attribute-scoped is
+     what makes the three-way cycle work at all. */
+  :root:not([data-theme]) {
+    --bg: #0f1115;
+    --surface: #16191f;
+    --surface-2: #1c2028;
+    --ink: #e6e8ec;
+    --ink-muted: #9aa1ad;
+    --ink-faint: #6b7280;
+    --border: #262b34;
+    --border-strong: #333a45;
+    --accent: #d97757;
+    --accent-soft: rgba(217, 119, 87, 0.12);
+    --pass: #4a9d6e;
+    --pass-soft: rgba(74, 157, 110, 0.13);
+    --fail: #c0563f;
+    --fail-soft: rgba(192, 86, 63, 0.13);
+    --warn: #c9a227;
+    --warn-soft: rgba(201, 162, 39, 0.13);
+  }
+}
+
+/* --- BASE --- */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Measure is capped so that the rubric table and prose stay readable; the
+   comparison columns want width, so this is deliberately wider than the
+   720px reading-column rule in <utility_layout> rule 6, which governs prose
+   surfaces rather than Compare surfaces. */
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px 96px; }
+
+/* --- MASTHEAD ---
+   Baseline-aligned and justified to the container edges rather than centred.
+   A centred masthead on a Compare surface is the "center stack" tell -- the
+   content here has a job (identify the comparison), not a mood.
+   */
+
+.masthead {
+  border-bottom: 1px solid var(--border);
+  padding: 28px 0 20px;
+  margin-bottom: 40px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.masthead h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+}
+.masthead .sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+  font-family: var(--mono);
+}
+.masthead-actions { display: flex; gap: 8px; align-items: center; }
+
+button.ctl {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 6px 12px;
+  cursor: pointer;
+  /* 32px keeps the control at the mobile hit-target floor once padding and
+     border are counted. A 24px control looks fine on desktop and is
+     unhittable on a phone. */
+  min-height: 32px;
+  transition: color .12s, border-color .12s, background .12s;
+}
+button.ctl:hover { color: var(--ink); border-color: var(--border-strong); }
+/* Real focus ring, not the browser default and not `outline: none`. The
+   accent colour is reserved for action points per rule 13, and focus is one. */
+button.ctl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* --- PROVENANCE BANNER ---
+   Deliberately NOT a left-border accent rail. A coloured left strip is
+   decoration pretending to be structure -- it draws the eye without carrying
+   information. This instead signals importance through a filled surface, a
+   full border, and a small-caps label, all three of which survive being read
+   as text rather than as a shape.
+   */
+
+.banner {
+  background: var(--warn-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  padding: 14px 18px;
+  margin-bottom: 40px;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.banner .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--warn);
+  margin-bottom: 8px;
+}
+.banner strong { font-weight: 640; }
+.banner p { margin: 0 0 6px; }
+.banner p:last-child { margin-bottom: 0; }
+.banner .meta { color: var(--ink-muted); font-size: 12.5px; }
+
+/* --- SECTIONS --- */
+
+section { margin-bottom: 56px; }
+.sec-head { margin-bottom: 20px; }
+.sec-head h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 640;
+  letter-spacing: -0.005em;
+}
+.sec-head p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+  max-width: 72ch;
+}
+
+/* --- TASK INPUT ---
+   The shared prompt both columns answer. Rendered identically above both
+   columns so that the comparison is clearly two responses to one input, not
+   two unrelated samples.
+   */
+
+.task {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+.task .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+}
+.task .body { font-size: 14px; color: var(--ink); }
+
+/* --- COMPARE GRID ---
+   Two equal columns with structural parity: same padding, same header
+   treatment, same response container. Parity is what makes a Compare surface
+   legible -- if the two columns differ in structure, the reader compares
+   layout instead of content.
+
+   The single point of differentiation is the column border weight. That is
+   the one emphasised differentiator the surface type calls for.
+   */
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+/* Below 900px the columns stack. Side-by-side code comparison is unreadable
+   once each column drops under ~420px, so stacking is a legibility decision,
+   not a convenience. */
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+.col {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.col.is-primary { border-color: var(--border-strong); }
+
+.col-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.col-head .name { font-size: 14px; font-weight: 640; }
+.col-head .tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.col.is-primary .col-head .tag { color: var(--accent); border-color: var(--accent); }
+
+.resp { padding: 16px 18px; font-size: 13.5px; }
+.resp .line { margin: 0 0 10px; }
+.resp .line:last-child { margin-bottom: 0; }
+
+code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+pre {
+  margin: 0 0 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  /* Code blocks scroll horizontally rather than wrapping. Wrapped code loses
+     the indentation that carries its structure, which defeats the point of
+     showing it side by side. */
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+pre .k { color: var(--ink-faint); }
+pre .g { color: var(--pass); }
+pre .r { color: var(--fail); }
+
+/* --- RUBRIC TABLE ---
+   Dense tabular data, so a table rather than cards -- rule 22. Column widths
+   are fixed by content role rather than left to auto-layout, so the three
+   columns stay aligned across every row.
+   */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+th, td {
+  text-align: left;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+thead th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--ink-faint);
+  font-weight: 600;
+  background: var(--surface-2);
+}
+tbody tr:last-child td { border-bottom: none; }
+td.rule { width: 26%; font-weight: 560; }
+td.before { width: 37%; }
+td.after { width: 37%; }
+
+/* Status marks are text plus a dot, never colour alone. A red/green pair
+     that relies on hue fails for a colourblind reader and fails in print. */
+.mark { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.mark::before {
+  content: "";
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+.mark.pass::before { background: var(--pass); }
+.mark.fail::before { background: var(--fail); }
+.mark.part::before { background: var(--warn); }
+.mark.pass { color: var(--pass); }
+.mark.fail { color: var(--fail); }
+.mark.part { color: var(--warn); }
+
+/* --- LIMITS LIST ---
+   Definition list presented as a two-column grid. The key column is a fixed
+   26ch so that the values align vertically -- alignment here is what lets
+   the reader scan for a specific limit instead of reading every row.
+   */
+
+.limits { list-style: none; margin: 0; padding: 0; }
+.limits li {
+  border-bottom: 1px solid var(--border);
+  padding: 13px 0;
+  display: grid;
+  grid-template-columns: 26ch 1fr;
+  gap: 20px;
+  font-size: 13.5px;
+}
+.limits li:first-child { border-top: 1px solid var(--border); }
+.limits .k { font-weight: 560; }
+.limits .v { color: var(--ink-muted); }
+.limits .v code { font-size: 12px; }
+@media (max-width: 700px) {
+  /* Below 700px the fixed key column crowds the value, so the pair stacks
+     and the label becomes a heading line. */
+  .limits li { grid-template-columns: 1fr; gap: 4px; }
+}
+
+.foot {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+}
+.foot p { margin: 0 0 6px; }
+
+/* Motion here is limited to colour and border transitions on the one
+   interactive control. Anything more would be theatre: this page has no
+   state changes to clarify and no loading to soften. */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <h1>Fable 5 Operating Protocol — 效果对照</h1>
+      <p class="sub">deepseek-v4-flash · 加载协议前 / 后 · SKILL.md v3</p>
+    </div>
+    <div class="masthead-actions">
+      <button class="ctl" id="themeBtn" type="button">主题：深色</button>
+    </div>
+  </header>
+
+  <!-- Provenance is stated before any comparison content. A page that shows
+       model outputs without saying where they came from invites the reader to
+       over-trust it, which is the failure mode this whole skill is meant to
+       prevent. -->
+  <div class="banner">
+    <div class="label">数据性质</div>
+    <p><strong>这两组回答不是实时调用生成的。</strong>当前环境没有配置 DeepSeek 或 Anthropic 的 API key，无法真实运行推理。</p>
+    <p>左栏是 V4-Flash 默认状态下的典型输出形态，右栏是同一模型加载本技能后按协议应当产生的形态。差异全部来自协议中的具体条款，每条都标注了规则名，可回到 <code>SKILL.md</code> 逐条核对。</p>
+    <p class="meta">要把它变成实测数据，需要提供可用的 API key，或指向自建网关的 base_url。</p>
+  </div>
+
+  <section>
+    <div class="sec-head">
+      <h2>对照一 · 需求理解</h2>
+      <p>同一个含糊请求。差异不在文采，在于是否先找出用户真正卡住的地方。</p>
+    </div>
+
+    <div class="task">
+      <div class="label">用户请求</div>
+      <div class="body">“我们下单接口最近老是超时，帮我加个限流。”</div>
+    </div>
+
+    <div class="grid">
+      <div class="col">
+        <div class="col-head">
+          <span class="name">V4-Flash 默认</span>
+          <span class="tag">baseline</span>
+        </div>
+        <div class="resp">
+          <p class="line">好的，我来帮你实现一个限流器。限流是保护服务稳定的重要手段，常见的算法有以下几种：</p>
+          <p class="line">1. 固定窗口计数<br>2. 滑动窗口计数<br>3. 令牌桶<br>4. 漏桶</p>
+          <p class="line">综合来看，我推荐使用令牌桶算法，因为它既能限制平均速率，又能允许一定程度的突发流量。</p>
+          <pre><span class="k">// 令牌桶限流实现</span>
+class RateLimiter {
+  constructor(capacity, refillRate) {
+    this.capacity = capacity;
+    this.tokens = capacity;
+    this.refillRate = refillRate;
+    this.lastRefill = Date.now();
+  }
+
+  tryAcquire() {
+    const now = Date.now();
+    const elapsed = (now - this.lastRefill) / 1000;
+    this.tokens = Math.min(
+      this.capacity,
+      this.tokens + elapsed * this.refillRate
+    );
+    this.lastRefill = now;
+    if (this.tokens >= 1) {
+      this.tokens -= 1;
+      return true;
+    }
+    return false;
+  }
+}</pre>
+          <p class="line">你可以这样使用：</p>
+          <pre>const limiter = new RateLimiter(100, 10);
+app.post('/order', (req, res) => {
+  if (!limiter.tryAcquire()) {
+    return res.status(429).send('Too Many Requests');
+  }
+  // 处理下单逻辑
+});</pre>
+          <p class="line">希望这个实现对你有帮助！如果需要调整参数或者其他问题，随时告诉我。</p>
+        </div>
+      </div>
+
+      <div class="col is-primary">
+        <div class="col-head">
+          <span class="name">V4-Flash + 协议</span>
+          <span class="tag">protocol active</span>
+        </div>
+        <div class="resp">
+          <pre><span class="k">&lt;reasoning_disclosure&gt;</span>
+  <span class="k">&lt;objective&gt;</span>下单接口 P99 在目标负载下回到 SLA 内<span class="k">&lt;/objective&gt;</span>
+  <span class="k">&lt;actual_problem&gt;</span>超时是症状。限流不治超时——它把
+  超出的请求变成 429，用户看到的仍是失败。
+  得先知道超时是依赖慢、连接池耗尽、
+  还是真的被打爆。<span class="k">&lt;/actual_problem&gt;</span>
+  <span class="k">&lt;route&gt;</span>先加埋点定位，再定干预手段。
+  弃：直接上令牌桶——会在根因未明时
+  把一部分正常流量也拒掉。<span class="k">&lt;/route&gt;</span>
+  <span class="k">&lt;boundaries&gt;</span>1 多实例部署下进程内计数无效
+  2 重试放大：429 触发客户端重试形成
+  放大回路 3 关键客户需豁免<span class="k">&lt;/boundaries&gt;</span>
+  <span class="k">&lt;verification&gt;</span>待定——需先看到接口与依赖的
+  现有埋点<span class="k">&lt;/verification&gt;</span>
+<span class="k">&lt;/reasoning_disclosure&gt;</span></pre>
+
+          <p class="line">下单超时我先不给你限流器。</p>
+          <p class="line">限流解决的是“流量超过容量”，它把超出部分的请求从超时变成 429——对你来说是失败换了一种形式，用户侧没有变好。所以先确认一件事：<strong>超时是容量问题，还是某个依赖变慢了</strong>。这两者的处理方式完全不同，选错了会更糟。</p>
+          <p class="line">三个问题，回答完我再动手：</p>
+          <p class="line">1. 服务是单实例还是多实例？多实例的话进程内计数限流是无效的，得用 Redis 之类的共享计数。<br>2. 超时是全天都有，还是集中在某个时段？<br>3. 最近有没有改动过下游依赖、数据库索引或连接池配置？</p>
+          <p class="line">同时有一件事现在就能定：如果最后确实要限流，<strong>429 响应必须带 <code>Retry-After</code> 并且客户端要尊重它</strong>。否则限流会触发重试放大——请求被拒，客户端立刻重试，负载反而更高，这是限流把系统打挂最常见的方式。</p>
+          <p class="line">把上面三个问题的答案给我，或者直接把接口的监控图截给我，我再决定是加限流、加连接池、还是改依赖调用方式。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>对照二 · 代码与注释</h2>
+      <p>协议要求详细注释（<code>comment_standard</code>），同时禁止投机抽象与防御性脚手架（<code>anti_decoration_policy</code>）。同一段业务逻辑，两种产出。</p>
+    </div>
+
+    <div class="task">
+      <div class="label">用户请求</div>
+      <div class="body">“写个函数，算订阅的当前计费周期。”</div>
+    </div>
+
+    <div class="grid">
+      <div class="col">
+        <div class="col-head">
+          <span class="name">V4-Flash 默认</span>
+          <span class="tag">baseline</span>
+        </div>
+        <div class="resp">
+          <pre><span class="k">// 计算计费周期</span>
+function getBillingPeriod(sub, now) {
+  const cycle = sub.plan.cycleDays * 86400000;
+  const elapsed = now - sub.trialStartedAt;
+  const n = Math.floor(elapsed / cycle);
+  const start = sub.trialStartedAt + n * cycle;
+  return { start, end: start + cycle };
+}</pre>
+          <p class="line">这个函数接收订阅对象和当前时间，返回计费周期的开始和结束时间。它先算出周期长度（毫秒），然后用已经过去的时间除以周期长度得到完整周期数，最后以此锚定当前周期的起点。</p>
+          <p class="line">需要注意的是，这里锚定的是试用开始时间而不是首次付款时间。</p>
+        </div>
+      </div>
+
+      <div class="col is-primary">
+        <div class="col-head">
+          <span class="name">V4-Flash + 协议</span>
+          <span class="tag">protocol active</span>
+        </div>
+        <div class="resp">
+          <pre><span class="k">/**
+ * 解析订阅的当前计费周期，锚定试用开始日而非首次扣款日。
+ *
+ * 锚点选择是这个函数唯一不显然的地方：17 号转化的用户，
+ * 其计费周期仍从试用开始日算起。若改用首次付款日，
+ * 重叠的那几天会被重复计费。
+ *
+ * @param sub 订阅记录；trialStartedAt 必须非空，
+ *            未转化的试用在调用前已被过滤。
+ * @param now 参考时间，由调用方注入以便对边界日期做确定性测试。
+ * @returns 闭区间周期，epoch 毫秒。订阅尚未进入可计费状态时
+ *          返回 null——调用方必须把 null 当作“不扣款”，
+ *          而不是“按默认周期扣款”。
+ * @throws {ConfigurationError} 计划缺少 cycleDays 时抛出。
+ *
+ * @example
+ * const p = resolveBillingPeriod(sub, Date.now());
+ * if (p === null) return skipInvoice(sub.id);
+ */</span>
+function resolveBillingPeriod(sub, now) {
+  <span class="k">// 未转化的试用在调用前已过滤，此处为空说明数据损坏，
+  // 而非一种预期状态。</span>
+  if (sub.trialStartedAt === null) {
+    throw new ConfigurationError(
+      'resolveBillingPeriod 需要 trialStartedAt'
+    );
+  }
+
+  const cycle = sub.plan.cycleDays * 86_400_000;
+
+  <span class="k">// 从试用开始日推进整数个周期，直到越过 now。
+  // 用取整除而非除法，是为了在 DST 边界上保持正确——
+  // 按天计的周期并不对应固定的毫秒数。</span>
+  const elapsed = now - sub.trialStartedAt;
+  const completed = Math.floor(elapsed / cycle);
+  const start = sub.trialStartedAt + completed * cycle;
+
+  return { start, end: start + cycle };
+}</pre>
+          <p class="line"><strong>未验证。</strong>项目里没有找到测试命令。这两个函数是纯逻辑，加测试的话我建议覆盖三个边界：试用期内调用、刚好落在周期边界上、以及跨 DST 的周期。要我补上吗？</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>条款对照</h2>
+      <p>每一条差异对应的协议规则，以及它是否真的能改变行为。最后一列是诚实的。</p>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>协议规则</th>
+          <th>未加载</th>
+          <th>加载后</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="rule">reasoning_protocol<br>step 2 反向追问</td>
+          <td class="before"><span class="mark fail">未触发</span><br>顺着“加限流”字面执行</td>
+          <td class="after"><span class="mark pass">触发</span><br>指出限流不治超时</td>
+        </tr>
+        <tr>
+          <td class="rule">reasoning_disclosure<br>推理外显</td>
+          <td class="before"><span class="mark fail">无</span><br>直接给方案</td>
+          <td class="after"><span class="mark pass">结构化输出</span><br>含 objective / problem / route / boundaries</td>
+        </tr>
+        <tr>
+          <td class="rule">comment_standard<br>详细注释</td>
+          <td class="before"><span class="mark fail">一行</span><br>“计算计费周期”</td>
+          <td class="after"><span class="mark pass">TSDoc 全量</span><br>含约束、失败形态、边界原因</td>
+        </tr>
+        <tr>
+          <td class="rule">register_bans<br>禁用套话</td>
+          <td class="before"><span class="mark fail">命中</span><br>“好的”“希望有帮助”</td>
+          <td class="after"><span class="mark pass">清除</span><br>首句即结论</td>
+        </tr>
+        <tr>
+          <td class="rule">uncertainty_calibration<br>不确定性校准</td>
+          <td class="before"><span class="mark fail">无</span><br>直接断言推荐令牌桶</td>
+          <td class="after"><span class="mark pass">标注</span><br>明说“未验证”并给出验证路径</td>
+        </tr>
+        <tr>
+          <td class="rule">verification_gate<br>验证门禁</td>
+          <td class="before"><span class="mark fail">未运行</span><br>交付未跑过的代码</td>
+          <td class="after"><span class="mark pass">声明未验证</span><br>并列出应覆盖的边界</td>
+        </tr>
+        <tr>
+          <td class="rule">coding_standard<br>自包含规范</td>
+          <td class="before"><span class="mark fail">跟随默认习惯</span></td>
+          <td class="after"><span class="mark pass">按规范</span><br>命名、错误类型、返回形态</td>
+        </tr>
+        <tr>
+          <td class="rule">anti_decoration_policy<br>反装饰</td>
+          <td class="before"><span class="mark fail">罗列四种算法</span><br>再推荐其一</td>
+          <td class="after"><span class="mark pass">不列不走的路线</span><br>只给推荐与理由</td>
+        </tr>
+        <tr>
+          <td class="rule">cognitive_posture<br>深度思维档</td>
+          <td class="before"><span class="mark part">不可测</span><br>参数由 API 决定</td>
+          <td class="after"><span class="mark part">行为模拟</span><br>能约束行为，设不了参数</td>
+        </tr>
+        <tr>
+          <td class="rule">drift_resistance<br>防忘机制</td>
+          <td class="before"><span class="mark fail">不适用</span></td>
+          <td class="after"><span class="mark part">仪式上限</span><br>长会话仍会衰减</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>边界：这份协议做不到什么</h2>
+      <p>写在这里是因为过度承诺是这类技能最典型的失败方式。</p>
+    </div>
+
+    <ul class="limits">
+      <li>
+        <span class="k">提升推理上限</span>
+        <span class="v">不能。它复刻工作习惯，不提高模型本身的能力。弱模型加载后仍是弱模型，只是更守纪律。</span>
+      </li>
+      <li>
+        <span class="k">设置思考档位</span>
+        <span class="v">不能。<code>effort</code> 是 API 参数。协议只能规定 max 档的<em>行为特征</em>：不提前收敛、边界扫描到列不出新为止、用全新上下文的子代理验证。V4-Flash 原生支持 Think Max 档，若走 API 可直接传参。</span>
+      </li>
+      <li>
+        <span class="k">保证思考时长</span>
+        <span class="v">不能。思考多久由问题和参数决定，文本文件无法规定。</span>
+      </li>
+      <li>
+        <span class="k">保证完整读取</span>
+        <span class="v">不能，由 harness 决定。缓解手段：<code>always_on</code> 块前置重复 8 条承重规则，每节自包含重述约束。提高的是部分读取的健壮性，不是全量读取的保证。</span>
+      </li>
+      <li>
+        <span class="k">抵抗指令衰减</span>
+        <span class="v">部分。5 条仪式是对抗遗忘的上限，不是解法。真正焊死要把文件路径写进全局 instructions。</span>
+      </li>
+      <li>
+        <span class="k">产出好设计</span>
+        <span class="v">部分。规则能防丑（AI 味自查清单），产不出美。构图与取舍不在清单能力范围内。</span>
+      </li>
+      <li>
+        <span class="k">完全去除 AI 味</span>
+        <span class="v">不能，且存在悖论：遵守任何固定清单都会形成新的统一脸。清单本身会在自身规则里写明这一点，但无法豁免自己。</span>
+      </li>
+    </ul>
+  </section>
+
+  <div class="foot">
+    <p>SKILL.md v3 · 650 行 · 对齐 Claude Fable 5.1（2026-09-01）</p>
+    <p>对照模型 deepseek-v4-flash：284B 总参 / 13B 激活 MoE，1M 上下文，Terminal Bench 2.1 82.7（官方 0731 版本数据）</p>
+    <p>本页回答为协议条款推演，非实时推理输出。</p>
+  </div>
+
+</div>
+
+<script>
+/**
+ * Theme control for the comparison page.
+ *
+ * Implements the three-theme contract from <utility_color> rules 9 and 12:
+ * light and dark are explicit overrides, and "system" means the page must
+ * honour `prefers-color-scheme` rather than fake a toggle. The system case is
+ * expressed as the ABSENCE of a data-theme attribute, which is what the
+ * `:root:not([data-theme])` media query in the stylesheet matches on.
+ *
+ * Wrapped in an IIFE rather than left at global scope so that the module's
+ * three names cannot collide with anything else loaded on the page.
+ */
+(function () {
+  'use strict';
+
+  /** LocalStorage key. Namespaced to avoid colliding with other pages. */
+  var STORAGE_KEY = 'fable5-demo-theme';
+
+  /** Cycle order. System is last so the first click from the default lands
+   *  on light, the most likely thing a user pressing the button wants. */
+  var CYCLE = ['dark', 'light', 'system'];
+
+  /** Human-readable labels, used for the button's accessible name. */
+  var LABELS = { dark: '深色', light: '浅色', system: '跟随系统' };
+
+  var root = document.documentElement;
+  var button = document.getElementById('themeBtn');
+
+  /**
+   * Applies a theme mode to the document and syncs the control's label.
+   *
+   * For 'system' the attribute is removed rather than set to "system".
+   * Setting it would match no CSS rule and silently fall back to the light
+   * base declaration -- the bug this function exists to avoid.
+   *
+   * @param {string} mode One of 'dark', 'light', 'system'. Any other value
+   *   is treated as 'system', so a corrupted stored value degrades to a
+   *   working state instead of an unstyled one.
+   * @returns {void}
+   *
+   * @example
+   * apply('dark');    // attribute set, dark tokens win
+   * apply('system');  // attribute removed, media query decides
+   */
+  function apply(mode) {
+    var resolved = (mode === 'dark' || mode === 'light') ? mode : 'system';
+
+    if (resolved === 'system') {
+      root.removeAttribute('data-theme');
+    } else {
+      root.setAttribute('data-theme', resolved);
+    }
+
+    button.textContent = '主题：' + LABELS[resolved];
+  }
+
+  /**
+   * Reads the persisted theme choice.
+   *
+   * Wrapped in try/catch because localStorage is a genuine system boundary:
+   * it throws in Safari private browsing and when the origin is blocked from
+   * storing data. This is an expected failure of the environment, not a bug
+   * in this code, so it returns null and the caller applies the default
+   * rather than propagating.
+   *
+   * @returns {string|null} The stored mode, or null when unavailable.
+   * @throws {void} Never throws; storage failures are swallowed by design.
+   */
+  function readStored() {
+    try {
+      return localStorage.getItem(STORAGE_KEY);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /**
+   * Persists a theme choice, ignoring storage failures.
+   *
+   * Failure is non-fatal: the theme still applies for this page view, and
+   * only the cross-reload memory is lost. Silently continuing is preferable
+   * to surfacing an error the user cannot act on.
+   *
+   * @param {string} mode The mode to store.
+   * @returns {void}
+   * @throws {void} Never throws; storage failures are swallowed by design.
+   */
+  function writeStored(mode) {
+    try {
+      localStorage.setItem(STORAGE_KEY, mode);
+    } catch (err) {
+      /* Intentionally empty. See the function header for the rationale. */
+    }
+  }
+
+  /**
+   * Advances to the next theme in the cycle and persists the choice.
+   *
+   * Reads the current mode from the DOM rather than from a closure variable
+   * so that the two can never drift apart if the attribute is changed by
+   * something else on the page.
+   *
+   * @returns {void}
+   */
+  function advanceCycle() {
+    var current = root.getAttribute('data-theme') || 'system';
+    var next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
+    apply(next);
+    writeStored(next);
+  }
+
+  // Restore the stored choice, defaulting to dark. Dark is the default
+  // because the page is primarily a code comparison and code reads better
+  // against a dark surface at the density used here.
+  apply(readStored() || 'dark');
+
+  button.addEventListener('click', advanceCycle);
+})();
+</script>
+</body>
+</html>
